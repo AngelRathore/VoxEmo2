@@ -1,0 +1,31 @@
+### Voxemo API — VS Code REST Client
+### Install "REST Client" extension (humao.rest-client) to use these
+
+@base_url = http://localhost:8000
+
+# ─────────────────────────────────────────
+# Health Check
+# ─────────────────────────────────────────
+
+### GET /health
+GET {{base_url}}/health
+Accept: application/json
+
+###
+
+# ─────────────────────────────────────────
+# Predict Emotion from WAV file
+# ─────────────────────────────────────────
+
+### POST /predict — upload a local WAV file
+POST {{base_url}}/predict
+Content-Type: multipart/form-data; boundary=----Boundary
+
+------Boundary
+Content-Disposition: form-data; name="file"; filename="test.wav"
+Content-Type: audio/wav
+
+< ./backend/test.wav
+------Boundary--
+
+###
