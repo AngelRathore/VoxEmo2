@@ -1,6 +1,6 @@
 import numpy as np
 import librosa
-from app.config import get_settings
+from app.config import settings
 
 
 def extract_features(file_path: str) -> np.ndarray:
@@ -9,9 +9,8 @@ def extract_features(file_path: str) -> np.ndarray:
     Sample rate and duration come from .env via Settings.
     Raises ValueError on corrupt/unreadable audio.
     """
-    cfg = get_settings()
-    sr = cfg.audio_sample_rate
-    duration = cfg.audio_feature_duration
+    sr = settings.audio_sample_rate
+    duration = settings.audio_feature_duration
 
     try:
         y, sr = librosa.load(file_path, sr=sr)

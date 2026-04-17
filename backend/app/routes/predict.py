@@ -1,97 +1,52 @@
-import json
-import os
-import tempfile
-import logging
-
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+import io
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
+from datetime import datetime
 
-from app.config import get_settings
-from app.db.database import Prediction, get_db
+from app.config import settings
+from app.db.database import get_db, Prediction
 from app.services.predictor import predict_emotion
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
-ALLOWED_EXTENSIONS = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".webm"}
-
+ALLOWED_EXTENSIONS = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
+ALLOWED_MIMES = {"audio/wav", "audio/mpeg", "audio/ogg", "audio/flac", "audio/mp4",
+                 "audio/x-wav", "audio/wave"}
 
 @router.post("/predict")
-async def predict(
-    request: Request,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    cfg = get_settings()
-
-    # ── 1. Extension check ───────────────────────────────────────────────
-    filename = file.filename or "upload"
-    ext = os.path.splitext(filename)[1].lower()
+async def predict(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # 1. Extension check
+    import os
+    ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=415,
-            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
-        )
+        raise HTTPException(415, f"Unsupported file type '{ext}'")
 
-    # ── 2. File size check ───────────────────────────────────────────────
-    raw_bytes = await file.read()
+    # 2. Read & size check
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(400, "Empty file")
+    max_bytes = settings.max_audio_size_mb * 1024 * 1024
+    if len(audio_bytes) > max_bytes:
+        raise HTTPException(413, f"File exceeds {settings.max_audio_size_mb} MB limit")
 
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-    if len(raw_bytes) > cfg.max_audio_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum allowed size is {cfg.max_audio_size_mb} MB.",
-        )
-
-    # ── 3. Write to temp file ────────────────────────────────────────────
-    tmp_path = None
+    # 3. Run inference (validates duration + corruption internally)
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-            tmp.write(raw_bytes)
-            tmp_path = tmp.name
+        result = predict_emotion(audio_bytes)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Inference failure: {e}")
 
-        # ── 4. Audio duration check (SAFE VERSION) ────────────────────────
-        try:
-            import librosa
-            duration = librosa.get_duration(path=tmp_path)
-            print("Audio duration:", duration)
-        except Exception as e:
-            print("Librosa error, skipping duration check:", e)
+    # 4. Persist to DB
+    row = Prediction(
+        emotion=result["emotion"],
+        confidence=result["confidence"],
+        emoji=result["emoji"],
+        color=result["color"],
+        filename=file.filename,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
 
-        # ── 5. Run prediction ────────────────────────────────────────────
-        try:
-            result = predict_emotion(tmp_path)
-        except Exception as e:
-            logger.exception("Prediction pipeline failed")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Model inference failed: {str(e)}",
-            )
-
-        # ── 6. Persist to SQLite ─────────────────────────────────────────
-        try:
-            record = Prediction(
-                filename=filename,
-                emotion=result["emotion"],
-                confidence=result["confidence"],
-                emoji=result["emoji"],
-                all_emotions_json=json.dumps(result["all_emotions"]),
-            )
-            db.add(record)
-            db.commit()
-            db.refresh(record)
-
-            result["id"] = record.id
-            result["saved_at"] = str(record.created_at)
-
-        except Exception as e:
-            logger.warning(f"DB write failed (non-fatal): {e}")
-            db.rollback()
-
-        return result
-
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    return {**result, "id": row.id, "saved_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S")}

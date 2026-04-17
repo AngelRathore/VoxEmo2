@@ -1,53 +1,36 @@
-import os
-from functools import lru_cache
-from pydantic_settings import BaseSettings
-
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+from typing import List
 
 class Settings(BaseSettings):
-    # Server
-    port: int = 8000
-    host: str = "0.0.0.0"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
-    # Model paths
-    model_dir: str = "./models"
-    model_file: str = "emotion_keras_model_22113034.h5"
-    scaler_file: str = "minmax_scaler_22113034.pkl"
-    pca_file: str = "pca_transform_22113034.pkl"
+    port: int = Field(default=8000)
+    cors_origins: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:5173"]
+    )
 
-    # Audio constraints
-    max_audio_size_mb: int = 10
-    max_audio_duration_sec: int = 30
-    audio_sample_rate: int = 22050
-    audio_feature_duration: int = 3
+    model_dir: str = Field(default="./models")
+    model_file: str = Field(default="emotion_keras_model_22113034.h5")
+    scaler_file: str = Field(default="minmax_scaler_22113034.pkl")
+    pca_file: str = Field(default="pca_transform_22113034.pkl")
 
-    # Database
-    database_url: str = "sqlite:///./voxemo.db"
+    max_audio_size_mb: int = Field(default=10)
+    max_audio_duration_sec: int = Field(default=30)
 
-    # Groq
-    groq_api_key: str = ""
-    groq_model: str = "llama3-8b-8192"
+    # ✅ ADD THESE TWO LINES
+    audio_sample_rate: int = Field(default=22050)
+    audio_feature_duration: int = Field(default=3)
 
-    @property
-    def model_path(self) -> str:
-        return os.path.join(self.model_dir, self.model_file)
+    database_url: str = Field(default="sqlite:///./voxemo.db")
 
-    @property
-    def scaler_path(self) -> str:
-        return os.path.join(self.model_dir, self.scaler_file)
-
-    @property
-    def pca_path(self) -> str:
-        return os.path.join(self.model_dir, self.pca_file)
-
-    @property
-    def max_audio_bytes(self) -> int:
-        return self.max_audio_size_mb * 1024 * 1024
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    groq_api_key: str = Field(default="")
+    groq_model: str = Field(default="llama3-8b-8192")
 
 
-@lru_cache()
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()

@@ -1,86 +1,48 @@
 import numpy as np
-import logging
-
-from app.models.loader import get_assets
+from app.models.loader import get_model
 from app.utils.feature_extractor import extract_features
 
-logger = logging.getLogger(__name__)
-
-EMOTION_LABELS = {
-    0: "angry",
-    1: "calm",
-    2: "disgust",
-    3: "fearful",
-    4: "happy",
-    5: "neutral",
-    6: "sad",
-    7: "surprised",
-}
-
-EMOTION_METADATA = {
+EMOTION_META = {
     "angry":     {"emoji": "😠", "color": "#ef4444"},
-    "calm":      {"emoji": "😌", "color": "#6366f1"},
+    "calm":      {"emoji": "😌", "color": "#60a5fa"},
     "disgust":   {"emoji": "🤢", "color": "#84cc16"},
-    "fearful":   {"emoji": "😨", "color": "#f59e0b"},
+    "fearful":   {"emoji": "😨", "color": "#a855f7"},
     "happy":     {"emoji": "😄", "color": "#22c55e"},
     "neutral":   {"emoji": "😐", "color": "#94a3b8"},
     "sad":       {"emoji": "😢", "color": "#3b82f6"},
-    "surprised": {"emoji": "😮", "color": "#a855f7"},
+    "surprised": {"emoji": "😲", "color": "#f97316"},
 }
 
+LABELS = ["angry", "calm", "disgust", "fearful", "happy", "neutral", "sad", "surprised"]
 
-def predict_emotion(file_path: str) -> dict:
-    try:
-        # ── Load model assets ─────────────────────────────
-        model, scaler, pca = get_assets()
 
-        # ── Extract features ─────────────────────────────
-        features = extract_features(file_path)
+def predict_emotion(audio_bytes: bytes) -> dict:
+    features = extract_features(audio_bytes)          # (194,)
+    model, scaler, pca = get_model()
 
-        if features is None:
-            raise ValueError("Feature extraction failed")
+    scaled = scaler.transform(features.reshape(1, -1))  # (1, 194)
+    reduced = pca.transform(scaled)                      # (1, n_components)
+    probs = model.predict(reduced, verbose=0)[0]         # (8,)
 
-        features = np.array(features)
+    idx = int(np.argmax(probs))
+    emotion = LABELS[idx]
+    confidence = float(probs[idx])
+    meta = EMOTION_META[emotion]
 
-        # 🔥 Ensure 2D shape (CRITICAL FIX)
-        if len(features.shape) == 1:
-            features = features.reshape(1, -1)
-
-        print("Features shape:", features.shape)
-
-        # ── Scale + PCA ──────────────────────────────────
-        features_scaled = scaler.transform(features)
-        features_pca = pca.transform(features_scaled)
-
-        print("After PCA shape:", features_pca.shape)
-
-        # ── Prediction ───────────────────────────────────
-        probs = model.predict(features_pca, verbose=0)[0]
-
-        pred_idx = int(np.argmax(probs))
-        emotion = EMOTION_LABELS[pred_idx]
-        confidence = float(probs[pred_idx])
-
-        # ── Build response ───────────────────────────────
-        all_emotions = [
-            {
-                "label": EMOTION_LABELS[i],
-                "probability": float(probs[i]),
-                **EMOTION_METADATA[EMOTION_LABELS[i]],
-            }
-            for i in range(len(EMOTION_LABELS))
-        ]
-
-        all_emotions.sort(key=lambda x: x["probability"], reverse=True)
-
-        return {
-            "emotion": emotion,
-            "confidence": round(confidence, 4),
-            "emoji": EMOTION_METADATA[emotion]["emoji"],
-            "color": EMOTION_METADATA[emotion]["color"],
-            "all_emotions": all_emotions,
+    all_emotions = [
+        {
+            "label": LABELS[i],
+            "probability": float(probs[i]),
+            "emoji": EMOTION_META[LABELS[i]]["emoji"],
+            "color": EMOTION_META[LABELS[i]]["color"],
         }
+        for i in range(len(LABELS))
+    ]
 
-    except Exception as e:
-        logger.exception("Prediction failed")
-        raise ValueError(f"Prediction pipeline error: {str(e)}")
+    return {
+        "emotion": emotion,
+        "confidence": round(confidence, 4),
+        "emoji": meta["emoji"],
+        "color": meta["color"],
+        "all_emotions": all_emotions,
+    }

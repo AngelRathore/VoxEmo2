@@ -1,39 +1,27 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
-from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.sql import func
-from app.config import get_settings
+from datetime import datetime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from app.config import settings
 
-settings = get_settings()
-
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False},  # needed for SQLite
-)
-
+engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
 class Prediction(Base):
     __tablename__ = "predictions"
-
     id = Column(Integer, primary_key=True, index=True)
-    filename = Column(String(255), nullable=True)
-    emotion = Column(String(50), nullable=False)
+    emotion = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
-    emoji = Column(String(10), nullable=True)
-    all_emotions_json = Column(Text, nullable=True)   # JSON string
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
+    emoji = Column(String, nullable=False)
+    color = Column(String, nullable=False)
+    filename = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 def init_db():
-    """Create tables if they don't exist."""
     Base.metadata.create_all(bind=engine)
 
-
 def get_db():
-    """FastAPI dependency — yields a DB session per request."""
-    db = SessionLocal()
+    db: Session = SessionLocal()
     try:
         yield db
     finally:

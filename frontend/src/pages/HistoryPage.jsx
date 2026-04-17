@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
+import api from '../api';
 import styles from './HistoryPage.module.css';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 export default function HistoryPage() {
   const [data, setData] = useState(null);
@@ -14,7 +12,7 @@ export default function HistoryPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axios.get(`${API_URL}/history?limit=50`);
+      const res = await api.get('/history?limit=50');
       setData(res.data);
     } catch (e) {
       setError('Could not load history. Is the backend running?');
@@ -23,13 +21,15 @@ export default function HistoryPage() {
     }
   }, []);
 
-  useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const clearHistory = async () => {
     if (!window.confirm('Clear all prediction history?')) return;
     setClearing(true);
     try {
-      await axios.delete(`${API_URL}/history`);
+      await api.delete('/history');
       await fetchHistory();
     } catch {
       setError('Failed to clear history.');
@@ -48,6 +48,7 @@ export default function HistoryPage() {
               Stored in SQLite · {data ? `${data.total} total predictions` : '…'}
             </p>
           </div>
+
           {data?.total > 0 && (
             <button
               className={styles.clearBtn}
@@ -63,7 +64,11 @@ export default function HistoryPage() {
           <div className={styles.loading}>
             <div className={styles.loadingBars}>
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className={styles.loadingBar} style={{ animationDelay: `${i * 0.1}s` }} />
+                <div
+                  key={i}
+                  className={styles.loadingBar}
+                  style={{ animationDelay: `${i * 0.1}s` }}
+                />
               ))}
             </div>
           </div>
@@ -87,12 +92,15 @@ export default function HistoryPage() {
               <span>File</span>
               <span>Time</span>
             </div>
+
             {data.results.map((r, i) => (
               <div key={r.id} className={styles.tableRow}>
                 <span className={styles.rowIndex}>{data.total - i}</span>
+
                 <span className={styles.rowEmotion}>
                   {r.emoji} <strong>{r.emotion}</strong>
                 </span>
+
                 <span className={styles.rowConf}>
                   <div className={styles.confBar}>
                     <div
@@ -102,11 +110,15 @@ export default function HistoryPage() {
                   </div>
                   {(r.confidence * 100).toFixed(1)}%
                 </span>
+
                 <span className={styles.rowFile} title={r.filename}>
                   {r.filename || '—'}
                 </span>
+
                 <span className={styles.rowTime}>
-                  {r.created_at ? new Date(r.created_at).toLocaleString() : '—'}
+                  {r.created_at
+                    ? new Date(r.created_at).toLocaleString()
+                    : '—'}
                 </span>
               </div>
             ))}

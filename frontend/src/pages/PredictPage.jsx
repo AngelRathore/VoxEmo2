@@ -1,12 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import axios from 'axios';
+import api from '../api';
 import AudioUploader from '../components/AudioUploader';
 import Recorder from '../components/Recorder';
 import ResultCard from '../components/ResultCard';
 import Loader from '../components/Loader';
 import styles from './PredictPage.module.css';
-
-const API_URL = 'http://127.0.0.1:8000';
 
 export default function PredictPage() {
   const [mode, setMode] = useState('upload');
@@ -17,7 +15,6 @@ export default function PredictPage() {
   const [history, setHistory] = useState([]);
 
   const handleFile = useCallback((f) => {
-    console.log("FILE RECEIVED:", f); // debug
     setFile(f);
     setResult(null);
     setError(null);
@@ -25,18 +22,14 @@ export default function PredictPage() {
 
   const handleBlob = useCallback((blob) => {
     const f = new File([blob], 'recording.webm', { type: blob.type });
-    console.log("BLOB FILE:", f); // debug
     setFile(f);
     setResult(null);
     setError(null);
   }, []);
 
   const analyze = async () => {
-    console.log("ANALYZE CLICKED");
-    console.log("CURRENT FILE:", file);
-
     if (!file) {
-      setError("Please select a file first");
+      setError('Please select a file first');
       return;
     }
 
@@ -48,8 +41,7 @@ export default function PredictPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await axios.post(`${API_URL}/predict`, formData);
-
+      const response = await api.post('/predict', formData);
       const data = response.data;
 
       setResult(data);
@@ -62,13 +54,10 @@ export default function PredictPage() {
         ...prev.slice(0, 4),
       ]);
     } catch (err) {
-      console.error("API ERROR:", err);
-
       const msg =
         err.response?.data?.detail ||
         err.message ||
-        "Something went wrong. Is the backend running?";
-
+        'Something went wrong. Is the backend running?';
       setError(msg);
     } finally {
       setLoading(false);
@@ -84,10 +73,10 @@ export default function PredictPage() {
   return (
     <main className={styles.page}>
       <div className={styles.layout}>
-        
+
         {/* LEFT PANEL */}
         <div className={styles.inputPanel}>
-          
+
           <div className={styles.panelHeader}>
             <h1 className={styles.title}>Emotion Analyzer</h1>
             <p className={styles.subtitle}>
@@ -103,7 +92,6 @@ export default function PredictPage() {
             >
               ↑ Upload File
             </button>
-
             <button
               className={`${styles.tab} ${mode === 'record' ? styles.tabActive : ''}`}
               onClick={() => { setMode('record'); reset(); }}
@@ -121,7 +109,7 @@ export default function PredictPage() {
             )}
           </div>
 
-          {/* Button (always visible) */}
+          {/* Button */}
           {!loading && (
             <button className={styles.analyzeBtn} onClick={analyze}>
               ⚡ Analyze Emotion
@@ -154,7 +142,6 @@ export default function PredictPage() {
               </div>
             </div>
           )}
-
         </div>
 
         {/* RIGHT PANEL */}
